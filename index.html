@@ -140,7 +140,9 @@ input[type=file]{display:none}
  * không còn lỗi 404 khi Chrome đăng nhập nhiều tài khoản Google.
  * ------------------------------------------------------------------ */
 var API_URL = 'https://script.google.com/macros/s/AKfycbz6y0x9OKxOshCP62lQKaNW6jilZLsCEmU9oZ5PSCpNg--OstPnenhFldOQGbxnkjuh/exec';
-var WEB_URL = location.origin + location.pathname.replace(/[^/]*$/, 'index.html');
+var WEB_URL = (/^qlcv\./i.test(location.hostname))
+  ? 'https://cv.nhattangroup.vn/'
+  : location.origin + location.pathname.replace(/[^/]*$/, 'index.html');
 var google = (function () {
   var FNS = ['taiNhap', 'luuNhap', 'nopHoSo', 'dsHoSo', 'chiTiet', 'xoaHoSo', 'xuatCV', 'taiAnh'];
   function tao(succ, fail) {

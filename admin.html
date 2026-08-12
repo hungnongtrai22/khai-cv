@@ -44,6 +44,9 @@ h4{margin:18px 0 4px;color:var(--navy);font-size:14.5px;text-transform:uppercase
 .dl2{background:#e8edf6;color:#12305e;border:none;padding:9px 14px;border-radius:9px;font-weight:700;cursor:pointer;font-family:inherit}
 .dl:disabled,.dl2:disabled{opacity:.45;cursor:default}
 .dg{background:#fdeaec;color:var(--red);border:none;padding:9px 14px;border-radius:9px;font-weight:700;cursor:pointer;font-family:inherit}
+.xoaD{background:#fdeaec;border:1px solid #f3c6cc;color:var(--red);font-size:12.5px;font-weight:700;
+  padding:5px 10px;border-radius:8px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.xoaD:hover{background:#fbd9de}
 @media(max-width:640px){ .hide-m{display:none} .rv b{flex:0 0 130px} }
 </style>
 </head>
@@ -73,7 +76,9 @@ h4{margin:18px 0 4px;color:var(--navy);font-size:14.5px;text-transform:uppercase
  * không còn lỗi 404 khi Chrome đăng nhập nhiều tài khoản Google.
  * ------------------------------------------------------------------ */
 var API_URL = 'https://script.google.com/macros/s/AKfycbz6y0x9OKxOshCP62lQKaNW6jilZLsCEmU9oZ5PSCpNg--OstPnenhFldOQGbxnkjuh/exec';
-var WEB_URL = location.origin + location.pathname.replace(/[^/]*$/, 'index.html');
+var WEB_URL = (/^qlcv\./i.test(location.hostname))
+  ? 'https://cv.nhattangroup.vn/'
+  : location.origin + location.pathname.replace(/[^/]*$/, 'index.html');
 var google = (function () {
   var FNS = ['taiNhap', 'luuNhap', 'nopHoSo', 'dsHoSo', 'chiTiet', 'xoaHoSo', 'xuatCV', 'taiAnh'];
   function tao(succ, fail) {
@@ -163,7 +168,8 @@ function ve(){
 
   document.getElementById('ds').innerHTML = `<table><thead><tr>
       <th>Mã</th><th>Họ tên</th><th class="hide-m">Ngày sinh</th><th>SĐT</th>
-      <th class="hide-m">Quê quán</th><th>Trạng thái</th><th class="hide-m">Cập nhật</th></tr></thead><tbody>` +
+      <th class="hide-m">Quê quán</th><th>Trạng thái</th><th class="hide-m">Cập nhật</th>
+      <th></th></tr></thead><tbody>` +
     f.map(r => `<tr class="r" onclick="xem('${r.ma}')">
       <td class="mono">${esc(r.ma)}</td>
       <td><b>${esc(r.hoten)||'(chưa điền tên)'}</b>${r.coanh?' 📷':''}</td>
@@ -171,7 +177,10 @@ function ve(){
       <td>${esc(r.sdt)}</td>
       <td class="hide-m">${esc(r.quequan)}</td>
       <td><span class="tag ${r.trangthai==='Đã nộp'?'t-nop':'t-nhap'}">${esc(r.trangthai)}</span></td>
-      <td class="hide-m">${esc(r.capnhat_luc)}</td></tr>`).join('') + '</tbody></table>';
+      <td class="hide-m">${esc(r.capnhat_luc)}</td>
+      <td><button class="xoaD" title="Xoá hồ sơ này"
+           onclick="event.stopPropagation();xoa('${r.ma}','${esc(r.hoten).replace(/'/g,'')}')">Xoá</button></td></tr>`)
+      .join('') + '</tbody></table>';
 }
 
 function xem(ma){
@@ -283,10 +292,17 @@ function taiAnhVe(ma){
   }).taiAnh(KEY, ma);
 }
 
-function xoa(ma){
-  if(!confirm('Xoá vĩnh viễn hồ sơ '+ma+'? Không khôi phục được.')) return;
+function xoa(ma, ten){
+  if(!confirm('Xoá vĩnh viễn hồ sơ ' + ma + (ten ? ' (' + ten + ')' : '') +
+              '?\n\nToàn bộ thông tin và ảnh thẻ sẽ bị xoá, không lấy lại được.')) return;
   delete KHO[ma];
-  google.script.run.withSuccessHandler(()=>{ dong(); tai(); }).xoaHoSo(KEY, ma);
+  try{ localStorage.removeItem('ntm_ds'); }catch(e){}
+  document.getElementById('ds').innerHTML = '<div class="empty">Đang xoá…</div>';
+  google.script.run.withSuccessHandler(function(){
+    dong(); tai();
+  }).withFailureHandler(function(e){
+    alert('Không xoá được: ' + (e && e.message ? e.message : e)); tai();
+  }).xoaHoSo(KEY, ma);
 }
 
 function chepLink(){
