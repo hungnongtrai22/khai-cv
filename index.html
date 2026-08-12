@@ -151,22 +151,37 @@ var google = (function () {
     FNS.forEach(function (fn) {
       api[fn] = function () {
         var args = Array.prototype.slice.call(arguments);
-        fetch(API_URL, {
-          method: 'POST',
-          redirect: 'follow',
-          body: JSON.stringify({ fn: fn, args: args })
-        })
-          .then(function (r) { return r.text(); })
-          .then(function (t) {
-            var j;
-            try { j = JSON.parse(t); }
-            catch (e) { throw new Error('Máy chủ trả về dữ liệu không đọc được'); }
-            if (j && j.ok) { if (succ) succ(j.kq); }
-            else { throw new Error((j && j.loi) || 'Lỗi máy chủ'); }
+        var than = JSON.stringify({ fn: fn, args: args });
+        var lan = 0;
+
+        function goi() {
+          lan++;
+          var huy = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+          var dongHo = setTimeout(function () { if (huy) huy.abort(); }, 90000);
+          fetch(API_URL, {
+            method: 'POST',
+            redirect: 'follow',
+            body: than,
+            signal: huy ? huy.signal : undefined
           })
-          .catch(function (e) {
-            if (fail) fail(e); else console.error(e);
-          });
+            .then(function (r) { return r.text(); })
+            .then(function (t) {
+              clearTimeout(dongHo);
+              var j;
+              try { j = JSON.parse(t); }
+              catch (e) { throw new Error('__MANG__'); }   // thường là trang lỗi tạm của Google
+              if (j && j.ok) { if (succ) succ(j.kq); }
+              else { if (fail) fail(new Error((j && j.loi) || 'Lỗi máy chủ')); }
+            })
+            .catch(function (e) {
+              clearTimeout(dongHo);
+              // lỗi mạng / Google chập chờn -> thử lại tối đa 3 lần
+              if (lan < 3) { setTimeout(goi, lan * 900); return; }
+              if (fail) fail(new Error('Mạng chập chờn, chưa gọi được máy chủ. Em thử lại nhé.'));
+              else console.error(e);
+            });
+        }
+        goi();
       };
     });
     return api;

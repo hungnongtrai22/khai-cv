@@ -1,0 +1,317 @@
+/**
+ * PHIẾU KHAI SƠ YẾU LÝ LỊCH – NHAT TAN MANPOWER
+ * Backend Google Apps Script. Xem HUONG_DAN.md để biết cách triển khai.
+ */
+
+var COLS = ["ma", "trangthai", "tao_luc", "capnhat_luc", "nop_luc", "hoten", "ngaysinh", "gioitinh", "chieucao", "cannang", "quequan", "nhommau", "canthi", "mumau", "taythuan", "sdt", "sdtnt", "honnhan", "banglai", "hutthuoc", "ruoubia", "hinhxam", "hokhau", "mien", "monhoc", "sogiay", "sothich", "tiengnhat", "uudiem", "hanche", "muctieu", "sotien", "dudinh", "nguoithannhat", "dinuocngoai", "ghichu", "hocvan", "lamviec", "giadinh", "anh_id", "anh_url"];
+var NHOM = ["hocvan", "lamviec", "giadinh"];
+var TZ = 'Asia/Bangkok';
+
+var P = PropertiesService.getScriptProperties();
+
+/* ==================================================================
+ *  CÀI ĐẶT – chạy 1 lần duy nhất sau khi dán code
+ * ================================================================== */
+function caiDat() {
+  var ss = SpreadsheetApp.create('DỮ LIỆU SƠ YẾU LÝ LỊCH – NHAT TAN MANPOWER');
+  var sh = ss.getSheets()[0].setName('HoSo');
+  sh.getRange(1, 1, 1, COLS.length).setValues([COLS])
+    .setFontWeight('bold').setBackground('#12305e').setFontColor('#ffffff');
+  sh.setFrozenRows(1);
+  sh.setColumnWidth(1, 110);
+  sh.getRange(1, 1, sh.getMaxRows(), COLS.length).setNumberFormat('@');
+
+  var folder = DriveApp.createFolder('ẢNH THẺ – SƠ YẾU LÝ LỊCH');
+  var key = 'QT' + Utilities.getUuid().replace(/-/g, '').substring(0, 12).toUpperCase();
+
+  P.setProperties({ SS_ID: ss.getId(), FOLDER_ID: folder.getId(), ADMIN_KEY: key });
+
+  Logger.log('=================================================');
+  Logger.log('ĐÃ CÀI ĐẶT XONG.');
+  Logger.log('Bảng dữ liệu : ' + ss.getUrl());
+  Logger.log('Thư mục ảnh  : ' + folder.getUrl());
+  Logger.log('MÃ QUẢN TRỊ  : ' + key + '   (giữ kín, dùng để mở trang quản trị)');
+  Logger.log('Bước tiếp theo: Deploy > New deployment > Web app');
+  Logger.log('  Execute as: Me   |   Who has access: Anyone');
+  Logger.log('=================================================');
+  return key;
+}
+
+function thongTin() {
+  var key = P.getProperty('ADMIN_KEY');
+  Logger.log('MÃ QUẢN TRỊ: ' + key);
+  Logger.log('Link quản trị: ' + ScriptApp.getService().getUrl() + '?trang=admin&key=' + key);
+  Logger.log('Link cho học sinh: ' + ScriptApp.getService().getUrl());
+  return key;
+}
+
+/* ==================================================================
+ *  ĐỊNH TUYẾN
+ * ================================================================== */
+function doGet(e) {
+  var p = (e && e.parameter) || {};
+  if (p.trang === 'admin') {
+    if (p.key !== P.getProperty('ADMIN_KEY')) {
+      return HtmlService.createHtmlOutput(
+        '<div style="font:16px system-ui;padding:40px;text-align:center">' +
+        'Không có quyền truy cập.</div>');
+    }
+    var a = HtmlService.createTemplateFromFile('Admin');
+    a.KEY = p.key;
+    return a.evaluate().setTitle('Quản trị hồ sơ')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+  var t = HtmlService.createTemplateFromFile('Index');
+  t.RESUME = p.ma || '';
+  return t.evaluate()
+    .setTitle('Khai sơ yếu lý lịch')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
+}
+
+/* ==================================================================
+ *  TIỆN ÍCH
+ * ================================================================== */
+function sheet_() {
+  var id = P.getProperty('SS_ID');
+  if (!id) throw new Error('Chưa chạy hàm caiDat().');
+  return SpreadsheetApp.openById(id).getSheetByName('HoSo');
+}
+
+function folder_() { return DriveApp.getFolderById(P.getProperty('FOLDER_ID')); }
+
+function now_() { return Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm:ss'); }
+
+/**
+ * Ép mọi giá trị đọc từ Sheets về chuỗi.
+ * google.script.run KHÔNG truyền được đối tượng Date — gặp Date là trả về null,
+ * đó chính là lỗi "Không tải được" ở trang quản trị.
+ */
+function sv_(v, cot) {
+  if (v === null || v === undefined) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    if (cot === 'ngaysinh') return Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
+    return Utilities.formatDate(v, TZ, 'dd/MM/yyyy HH:mm:ss');
+  }
+  return String(v);
+}
+
+function taoMa_() {
+  var kt = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ', s = '';
+  for (var i = 0; i < 5; i++) s += kt.charAt(Math.floor(Math.random() * kt.length));
+  return 'NTM-' + s;
+}
+
+function timDong_(sh, ma) {
+  var n = sh.getLastRow() - 1;
+  if (n < 1) return -1;
+  var vals = sh.getRange(2, 1, n, 1).getValues();
+  for (var i = 0; i < n; i++) if (String(vals[i][0]) === ma) return i + 2;
+  return -1;
+}
+
+function docDong_(sh, r) {
+  var v = sh.getRange(r, 1, 1, COLS.length).getValues()[0];
+  var o = {};
+  COLS.forEach(function (c, i) { o[c] = sv_(v[i], c); });
+  return o;
+}
+
+/**
+ * Chạy 1 lần nếu bảng dữ liệu được tạo trước bản vá này:
+ * đưa toàn bộ cột về định dạng văn bản và ghi lại các ô đã bị Sheets đổi thành ngày tháng.
+ */
+function suaDinhDang() {
+  var sh = sheet_();
+  var n = sh.getLastRow() - 1;
+  sh.getRange(1, 1, sh.getMaxRows(), COLS.length).setNumberFormat('@');
+  if (n < 1) { Logger.log('Bảng chưa có dòng nào, đã đặt định dạng văn bản.'); return; }
+  var rg = sh.getRange(2, 1, n, COLS.length);
+  var vals = rg.getValues();
+  for (var i = 0; i < n; i++)
+    for (var j = 0; j < COLS.length; j++)
+      vals[i][j] = sv_(vals[i][j], COLS[j]);
+  rg.setValues(vals);
+  Logger.log('Đã chuẩn hoá ' + n + ' dòng về dạng văn bản.');
+}
+
+/* ==================================================================
+ *  LƯU NHÁP / NỘP
+ * ================================================================== */
+function luuNhap(payload) { return ghi_(payload, false); }
+function nopHoSo(payload) { return ghi_(payload, true); }
+
+function ghi_(payload, nop) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = sheet_();
+    var ma = String((payload && payload.ma) || '').trim().toUpperCase();
+    var r = ma ? timDong_(sh, ma) : -1;
+    var moi = false;
+
+    if (r < 0) {
+      do { ma = taoMa_(); } while (timDong_(sh, ma) > 0);
+      r = sh.getLastRow() + 1;
+      moi = true;
+    }
+
+    var cu = moi ? {} : docDong_(sh, r);
+    var data = (payload && payload.data) || {};
+    var groups = (payload && payload.groups) || {};
+
+    // ảnh
+    var anhId = cu.anh_id || '', anhUrl = cu.anh_url || '', anhTra = null;
+    var a = payload && payload.anh;
+    if (a && a.xoa) {
+      if (anhId) { try { DriveApp.getFileById(anhId).setTrashed(true); } catch (er) {} }
+      anhId = ''; anhUrl = '';
+    } else if (a && a.b64) {
+      if (anhId) { try { DriveApp.getFileById(anhId).setTrashed(true); } catch (er) {} }
+      var f = luuAnh_(a.b64, ma, data.hoten || '');
+      anhId = f.getId();
+      anhUrl = 'https://drive.google.com/uc?id=' + anhId;
+      anhTra = { thumb: a.b64, id: anhId, url: anhUrl };
+    }
+
+    var out = COLS.map(function (c) {
+      switch (c) {
+        case 'ma': return ma;
+        case 'trangthai': return nop ? 'Đã nộp' : (cu.trangthai === 'Đã nộp' ? 'Đã nộp' : 'Nháp');
+        case 'tao_luc': return cu.tao_luc || now_();
+        case 'capnhat_luc': return now_();
+        case 'nop_luc': return nop ? now_() : (cu.nop_luc || '');
+        case 'anh_id': return anhId;
+        case 'anh_url': return anhUrl;
+      }
+      if (NHOM.indexOf(c) >= 0) return JSON.stringify(groups[c] || []);
+      return data[c] == null ? '' : String(data[c]);
+    });
+
+    sh.getRange(r, 1, 1, COLS.length).setValues([out]);
+    return { ok: true, ma: ma, anh: anhTra };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function luuAnh_(b64, ma, hoten) {
+  var m = b64.match(/^data:([^;]+);base64,(.*)$/);
+  var mime = m ? m[1] : 'image/jpeg';
+  var raw = m ? m[2] : b64;
+  var ext = mime.indexOf('png') >= 0 ? 'png' : 'jpg';
+  var ten = ma + (hoten ? ' - ' + String(hoten).replace(/[\\/:*?"<>|]/g, ' ').trim() : '') + '.' + ext;
+  var blob = Utilities.newBlob(Utilities.base64Decode(raw), mime, ten);
+  return folder_().createFile(blob);
+}
+
+/* ==================================================================
+ *  TẢI LẠI HỒ SƠ
+ * ================================================================== */
+/**
+ * khongAnh = true: bỏ qua việc tải ảnh thẻ (nặng ~200KB) cho nhanh.
+ * Trang quản trị dùng chế độ này rồi tải ảnh riêng bằng taiAnh().
+ */
+function taiNhap(ma, khongAnh) {
+  ma = String(ma || '').trim().toUpperCase();
+  if (!ma) return { ok: false };
+  var sh = sheet_();
+  var r = timDong_(sh, ma);
+  if (r < 0) return { ok: false };
+  var o = docDong_(sh, r);
+
+  var data = {}, groups = {};
+  COLS.forEach(function (c) {
+    if (['ma', 'trangthai', 'tao_luc', 'capnhat_luc', 'nop_luc', 'anh_id', 'anh_url'].indexOf(c) >= 0) return;
+    if (NHOM.indexOf(c) >= 0) { try { groups[c] = JSON.parse(o[c] || '[]'); } catch (e) { groups[c] = []; } }
+    else data[c] = sv_(o[c], c);
+  });
+
+  var anh = null;
+  if (o.anh_id && !khongAnh) {
+    try {
+      var b = DriveApp.getFileById(o.anh_id).getBlob();
+      anh = { id: o.anh_id, url: o.anh_url,
+              thumb: 'data:' + b.getContentType() + ';base64,' + Utilities.base64Encode(b.getBytes()) };
+    } catch (e) { anh = null; }
+  }
+  return { ok: true, ma: ma, trangthai: sv_(o.trangthai, 'trangthai'),
+           data: data, groups: groups, anh: anh, coanh: !!o.anh_id };
+}
+
+/* ==================================================================
+ *  QUẢN TRỊ
+ * ================================================================== */
+function ktKey_(key) {
+  if (key !== P.getProperty('ADMIN_KEY')) throw new Error('Không có quyền.');
+}
+
+/** Địa chỉ bảng dữ liệu / thư mục ảnh – nhớ sẵn để khỏi gọi Drive mỗi lần. */
+function lienKet_() {
+  var a = P.getProperty('SS_URL'), b = P.getProperty('FOLDER_URL');
+  if (!a || !b) {
+    a = SpreadsheetApp.openById(P.getProperty('SS_ID')).getUrl();
+    b = folder_().getUrl();
+    P.setProperties({ SS_URL: a, FOLDER_URL: b });
+  }
+  return { sheetUrl: a, folderUrl: b };
+}
+
+function dsHoSo(key) {
+  ktKey_(key);
+  var lk = lienKet_();
+  var sh = sheet_();
+  var n = sh.getLastRow() - 1;
+  if (n < 1) return { ok: true, rows: [], sheetUrl: lk.sheetUrl, folderUrl: lk.folderUrl };
+  var vals = sh.getRange(2, 1, n, COLS.length).getValues();
+  var idx = {}; COLS.forEach(function (c, i) { idx[c] = i; });
+  var rows = vals.map(function (v) {
+    return {
+      ma: sv_(v[idx.ma], 'ma'),
+      trangthai: sv_(v[idx.trangthai], 'trangthai'),
+      hoten: sv_(v[idx.hoten], 'hoten'),
+      ngaysinh: sv_(v[idx.ngaysinh], 'ngaysinh'),
+      sdt: sv_(v[idx.sdt], 'sdt'),
+      quequan: sv_(v[idx.quequan], 'quequan'),
+      gioitinh: sv_(v[idx.gioitinh], 'gioitinh'),
+      nop_luc: sv_(v[idx.nop_luc], 'nop_luc'),
+      capnhat_luc: sv_(v[idx.capnhat_luc], 'capnhat_luc'),
+      coanh: !!v[idx.anh_id]
+    };
+  }).reverse();
+  return { ok: true, rows: rows,
+           sheetUrl: lk.sheetUrl, folderUrl: lk.folderUrl,
+           formUrl: ScriptApp.getService().getUrl() };
+}
+
+function chiTiet(key, ma) { ktKey_(key); return taiNhap(ma, true); }
+
+function xoaHoSo(key, ma) {
+  ktKey_(key);
+  var sh = sheet_(), r = timDong_(sh, ma);
+  if (r < 0) return { ok: false };
+  var o = docDong_(sh, r);
+  if (o.anh_id) { try { DriveApp.getFileById(o.anh_id).setTrashed(true); } catch (e) {} }
+  sh.deleteRow(r);
+  return { ok: true };
+}
+
+/**
+ * Dọn hồ sơ nháp bỏ dở quá 60 ngày. Có thể đặt lịch chạy hàng tháng
+ * (Triggers > Add trigger > donNhapCu > Month timer).
+ */
+function donNhapCu() {
+  var sh = sheet_(), n = sh.getLastRow() - 1;
+  if (n < 1) return;
+  var vals = sh.getRange(2, 1, n, COLS.length).getValues();
+  var idx = {}; COLS.forEach(function (c, i) { idx[c] = i; });
+  var gioiHan = new Date().getTime() - 60 * 24 * 3600 * 1000;
+  var xoa = 0;
+  for (var i = vals.length - 1; i >= 0; i--) {
+    if (vals[i][idx.trangthai] === 'Đã nộp') continue;
+    var t = String(vals[i][idx.capnhat_luc] || '');
+    var m = t.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (!m) continue;
+    if (new Date(+m[3], +m[2] - 1, +m[1]).getTime() < gioiHan) { sh.deleteRow(i + 2); xoa++; }
+  }
+  Logger.log('Đã dọn ' + xoa + ' hồ sơ nháp cũ.');
+}

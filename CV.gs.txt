@@ -1,0 +1,220 @@
+/**
+ * XUẤT CV EXCEL / PDF + TẢI ẢNH THẺ — chạy ngay trên trang quản trị.
+ */
+
+var MAP_DON = {"hoten": {"o": "B3", "t": "text"}, "ngaysinh": {"o": "B4", "t": "date"}, "gioitinh": {"o": "H3", "t": "select"}, "chieucao": {"o": "H4", "t": "num"}, "cannang": {"o": "J4", "t": "num"}, "quequan": {"o": "B5", "t": "text"}, "nhommau": {"o": "H5", "t": "select"}, "canthi": {"o": "B6", "t": "select"}, "mumau": {"o": "H6", "t": "select"}, "taythuan": {"o": "J6", "t": "select"}, "sdt": {"o": "B7", "t": "tel"}, "sdtnt": {"o": "B8", "t": "tel"}, "honnhan": {"o": "H7", "t": "select"}, "banglai": {"o": "J7", "t": "select"}, "hutthuoc": {"o": "H8", "t": "select"}, "ruoubia": {"o": "J8", "t": "select"}, "hinhxam": {"o": "L8", "t": "select"}, "hokhau": {"o": "B9", "t": "text"}, "mien": {"o": "H9", "t": "select"}, "monhoc": {"o": "J9", "t": "text"}, "sogiay": {"o": "L9", "t": "num"}, "sothich": {"o": "B30", "t": "text"}, "tiengnhat": {"o": "B31", "t": "text"}, "uudiem": {"o": "I30", "t": "text"}, "hanche": {"o": "I31", "t": "text"}, "muctieu": {"o": "I33", "t": "text"}, "sotien": {"o": "I34", "t": "text"}, "dudinh": {"o": "I35", "t": "text"}, "nguoithannhat": {"o": "I36", "t": "select"}, "dinuocngoai": {"o": "I37", "t": "select"}, "ghichu": {"o": "A38", "t": "area"}};
+var NHOM_EX = [{"id": "hocvan", "rows": [12, 13, 14, 15], "model": 12, "merges": [["G", "I"], ["J", "K"]]}, {"id": "lamviec", "rows": [18, 19, 20], "model": 18, "merges": [["B", "F"], ["G", "I"], ["J", "L"]]}, {"id": "giadinh", "rows": [23, 24, 25, 26, 27, 28], "model": 23, "merges": [["B", "E"], ["F", "G"], ["I", "J"]]}];
+
+/** Chạy 1 lần để ghi nhận bảng mẫu SYLL. */
+function caiMau() {
+  return datMauSYLL('https://docs.google.com/spreadsheets/d/199VHB5UZ58ztjbqr5xfNCR22uausDyqbbomcyV4yawo/edit');
+}
+
+function datMauSYLL(url) {
+  var m = String(url || '').match(/[-\w]{25,}/);
+  if (!m) throw new Error('URL không hợp lệ.');
+  var ss = SpreadsheetApp.openById(m[0]);
+  P.setProperty('MAU_ID', m[0]);
+  Logger.log('Đã ghi nhận mẫu SYLL: ' + ss.getName());
+  return m[0];
+}
+
+/* ------------------------------------------------------------------ tiện ích */
+function _cot(ch) {
+  var n = 0;
+  for (var i = 0; i < ch.length; i++) n = n * 26 + (ch.charCodeAt(i) - 64);
+  return n;
+}
+function _tach(o) {
+  var m = String(o).match(/^([A-Z]+)(\d+)$/);
+  return { c: _cot(m[1]), r: parseInt(m[2], 10) };
+}
+function _thangNam(v) {
+  var m = String(v || '').match(/^(\d{4})-(\d{1,2})/);
+  return m ? { t: +m[2], n: +m[1] } : null;
+}
+function _ngayVN(v) {
+  var m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[3] + '/' + m[2] + '/' + m[1] : String(v || '');
+}
+function _tuoi(iso) {
+  var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return '';
+  var t = new Date(), y = +m[1], mo = +m[2], d = +m[3];
+  var a = t.getFullYear() - y;
+  if (t.getMonth() + 1 < mo || (t.getMonth() + 1 === mo && t.getDate() < d)) a--;
+  return a;
+}
+function _bmi(cao, nang) {
+  var h = parseFloat(String(cao).replace(/[^\d.]/g, '')) / 100;
+  var w = parseFloat(String(nang).replace(/[^\d.]/g, ''));
+  return (h > 0 && w > 0) ? Math.round(w / (h * h) * 10) / 10 : '';
+}
+
+/* ------------------------------------------------------------------ xuất CV */
+function xuatCV(key, ma, dang) {
+  ktKey_(key);
+  var mauId = P.getProperty('MAU_ID');
+  if (!mauId) throw new Error('Chưa cài mẫu SYLL. Xem hướng dẫn hàm datMauSYLL.');
+
+  var shD = sheet_(), r = timDong_(shD, ma);
+  if (r < 0) throw new Error('Không tìm thấy hồ sơ ' + ma);
+  var o = docDong_(shD, r);
+
+  var nhom = {};
+  NHOM_EX.forEach(function (g) {
+    try { nhom[g.id] = JSON.parse(o[g.id] || '[]'); } catch (e) { nhom[g.id] = []; }
+  });
+
+  var ban = DriveApp.getFileById(mauId).makeCopy('tam-' + ma + '-' + Date.now());
+  try {
+    var ss = SpreadsheetApp.openById(ban.getId());
+    var sh = ss.getSheets()[0];
+
+    // --- co giãn số dòng, làm từ khối dưới lên trên
+    var delta = {};
+    NHOM_EX.forEach(function (g) {
+      delta[g.id] = Math.max(1, (nhom[g.id] || []).length) - g.rows.length;
+    });
+    for (var i = NHOM_EX.length - 1; i >= 0; i--) {
+      var g = NHOM_EX[i], d = delta[g.id], cuoi = g.rows[g.rows.length - 1];
+      if (d > 0) {
+        sh.insertRowsBefore(cuoi, d);
+        var mau = sh.getRange(g.model, 1, 1, 12);
+        mau.copyTo(sh.getRange(cuoi, 1, d, 12), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+        sh.setRowHeights(cuoi, d, sh.getRowHeight(g.model));
+        for (var k = 0; k < d; k++)
+          g.merges.forEach(function (mg) {
+            sh.getRange(cuoi + k, _cot(mg[0]), 1, _cot(mg[1]) - _cot(mg[0]) + 1).merge();
+          });
+      } else if (d < 0) {
+        sh.deleteRows(cuoi + d + 1, -d);
+      }
+    }
+
+    // --- vị trí dòng sau khi co giãn
+    var cong = 0, dong = {};
+    NHOM_EX.forEach(function (g) {
+      var r0 = g.rows[0] + cong, n = g.rows.length + delta[g.id], a = [];
+      for (var j = 0; j < n; j++) a.push(r0 + j);
+      dong[g.id] = a;
+      cong += delta[g.id];
+    });
+    var tong = cong;
+    function dich(oo) {
+      var p = _tach(oo);
+      return p.r >= 30 ? oo.replace(/\d+$/, String(p.r + tong)) : oo;
+    }
+
+    // --- đọc 1 lần, sửa trong bộ nhớ, ghi 1 lần (nhanh hơn nhiều lần setValue)
+    var het = 38 + tong;
+    var rg = sh.getRange(1, 1, het, 12);
+    var vals = rg.getValues();
+    function put(a1, v) {
+      if (v === '' || v === null || v === undefined) return;
+      var p = _tach(a1);
+      if (p.r >= 1 && p.r <= het) vals[p.r - 1][p.c - 1] = v;
+    }
+
+    // --- trường đơn
+    Object.keys(MAP_DON).forEach(function (k) {
+      var m = MAP_DON[k], v = o[k];
+      if (v === '' || v === undefined || v === null) return;
+      if (m.t === 'date') v = _ngayVN(v);
+      var oo = dich(m.o);
+      if (k === 'ghichu') {
+        var p = _tach(oo);
+        var goc = vals[p.r - 1][p.c - 1];
+        vals[p.r - 1][p.c - 1] = String(goc).replace(/\s+$/, '') + '\n' + v;
+      } else {
+        put(oo, v);
+      }
+    });
+    put('J3', _tuoi(o.ngaysinh));
+    put('J5', _bmi(o.chieucao, o.cannang));
+
+    // --- nhóm lặp
+    NHOM_EX.forEach(function (g) {
+      var arr = nhom[g.id] || [], ds = dong[g.id];
+      for (var j = 0; j < arr.length && j < ds.length; j++) {
+        var it = arr[j], rr = ds[j];
+        if (g.id === 'hocvan') {
+          var a = _thangNam(it.tu), b = _thangNam(it.den);
+          if (a) { put('B' + rr, a.t); put('C' + rr, a.n); }
+          if (b) { put('E' + rr, b.t); put('F' + rr, b.n); }
+          if (a || b) put('D' + rr, '~');
+          var ten = it.truong || '';
+          if (it.loai && it.loai !== 'Khác') ten = (it.loai + ' ' + ten).replace(/\s+/g, ' ').trim();
+          put('G' + rr, ten);
+          put('J' + rr, it.diachi || '');
+          put('L' + rr, it.bang || '');
+        } else if (g.id === 'lamviec') {
+          var a2 = _thangNam(it.tu), b2 = _thangNam(it.den);
+          var s2 = '';
+          if (a2) s2 += (a2.t < 10 ? '0' : '') + a2.t + '/' + a2.n;
+          if (b2) s2 += ' ~ ' + (b2.t < 10 ? '0' : '') + b2.t + '/' + b2.n;
+          put('B' + rr, s2);
+          put('G' + rr, it.donvi || '');
+          put('J' + rr, it.cviec || '');
+        } else {
+          put('B' + rr, it.quanhe || '');
+          put('F' + rr, it.hoten || '');
+          put('H' + rr, it.namsinh || '');
+          put('I' + rr, it.noio || '');
+          put('K' + rr, it.songchung || '');
+          put('L' + rr, it.nghe || '');
+        }
+      }
+    });
+
+    rg.setValues(vals);
+
+    // --- ảnh thẻ vào ô K3
+    if (o.anh_id) {
+      try {
+        var bl = DriveApp.getFileById(o.anh_id).getBlob();
+        var img = sh.insertImage(bl, _cot('K'), 3);
+        var rong = 0, cao = 0, ci;
+        for (ci = _cot('K'); ci <= _cot('L'); ci++) rong += sh.getColumnWidth(ci);
+        for (ci = 3; ci <= 7; ci++) cao += sh.getRowHeight(ci);
+        var tl = Math.min((rong - 8) / img.getWidth(), (cao - 8) / img.getHeight());
+        img.setWidth(Math.round(img.getWidth() * tl));
+        img.setHeight(Math.round(img.getHeight() * tl));
+        img.setAnchorCellXOffset(4); img.setAnchorCellYOffset(4);
+      } catch (e) {}
+    }
+
+    SpreadsheetApp.flush();
+    var goc2 = 'https://docs.google.com/spreadsheets/d/' + ban.getId() + '/export?';
+    var url = (dang === 'pdf')
+      ? goc2 + 'format=pdf&gid=' + sh.getSheetId() +
+        '&portrait=true&scale=4&fitw=true&gridlines=false&printtitle=false' +
+        '&sheetnames=false&pagenumbers=false&fzr=false&horizontal_alignment=CENTER' +
+        '&vertical_alignment=MIDDLE&size=A4' +
+        '&top_margin=0.15&bottom_margin=0.15&left_margin=0.15&right_margin=0.15' +
+        '&r1=0&c1=0&r2=' + het + '&c2=12'
+      : goc2 + 'format=xlsx';
+    var res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } });
+    var ten = String(o.hoten || 'ho-so').replace(/[\\/:*?"<>|]/g, ' ').trim();
+    return { ok: true, dang: (dang === 'pdf' ? 'pdf' : 'xlsx'),
+             ten: ma + ' - ' + ten + (dang === 'pdf' ? '.pdf' : '.xlsx'),
+             b64: Utilities.base64Encode(res.getBlob().getBytes()) };
+  } finally {
+    try { ban.setTrashed(true); } catch (e) {}
+  }
+}
+
+/* ------------------------------------------------------------------ tải ảnh */
+function taiAnh(key, ma) {
+  ktKey_(key);
+  var sh = sheet_(), r = timDong_(sh, ma);
+  if (r < 0) return { ok: false };
+  var o = docDong_(sh, r);
+  if (!o.anh_id) return { ok: false, loi: 'Hồ sơ này chưa có ảnh thẻ.' };
+  var f = DriveApp.getFileById(o.anh_id), b = f.getBlob();
+  var duoi = b.getContentType().indexOf('png') >= 0 ? 'png' : 'jpg';
+  var ten = String(o.hoten || 'anh').replace(/[\\/:*?"<>|]/g, ' ').trim();
+  return { ok: true, ten: ma + ' - ' + ten + '.' + duoi,
+           mime: b.getContentType(),
+           b64: Utilities.base64Encode(b.getBytes()) };
+}

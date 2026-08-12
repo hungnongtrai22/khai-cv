@@ -57,7 +57,7 @@ h4{margin:18px 0 4px;color:var(--navy);font-size:14.5px;text-transform:uppercase
     <a id="lSheet" target="_blank">Mở bảng dữ liệu</a>
     <a id="lFolder" target="_blank">Thư mục ảnh</a>
     <button onclick="chepLink()">Chép link cho học sinh</button>
-    <button onclick="tai()">Tải lại</button>
+    <button onclick="taiLai()">Tải lại</button>
   </div>
   <div id="ds"></div>
 </div>
@@ -84,22 +84,37 @@ var google = (function () {
     FNS.forEach(function (fn) {
       api[fn] = function () {
         var args = Array.prototype.slice.call(arguments);
-        fetch(API_URL, {
-          method: 'POST',
-          redirect: 'follow',
-          body: JSON.stringify({ fn: fn, args: args })
-        })
-          .then(function (r) { return r.text(); })
-          .then(function (t) {
-            var j;
-            try { j = JSON.parse(t); }
-            catch (e) { throw new Error('Máy chủ trả về dữ liệu không đọc được'); }
-            if (j && j.ok) { if (succ) succ(j.kq); }
-            else { throw new Error((j && j.loi) || 'Lỗi máy chủ'); }
+        var than = JSON.stringify({ fn: fn, args: args });
+        var lan = 0;
+
+        function goi() {
+          lan++;
+          var huy = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+          var dongHo = setTimeout(function () { if (huy) huy.abort(); }, 90000);
+          fetch(API_URL, {
+            method: 'POST',
+            redirect: 'follow',
+            body: than,
+            signal: huy ? huy.signal : undefined
           })
-          .catch(function (e) {
-            if (fail) fail(e); else console.error(e);
-          });
+            .then(function (r) { return r.text(); })
+            .then(function (t) {
+              clearTimeout(dongHo);
+              var j;
+              try { j = JSON.parse(t); }
+              catch (e) { throw new Error('__MANG__'); }   // thường là trang lỗi tạm của Google
+              if (j && j.ok) { if (succ) succ(j.kq); }
+              else { if (fail) fail(new Error((j && j.loi) || 'Lỗi máy chủ')); }
+            })
+            .catch(function (e) {
+              clearTimeout(dongHo);
+              // lỗi mạng / Google chập chờn -> thử lại tối đa 3 lần
+              if (lan < 3) { setTimeout(goi, lan * 900); return; }
+              if (fail) fail(new Error('Mạng chập chờn, chưa gọi được máy chủ. Em thử lại nhé.'));
+              else console.error(e);
+            });
+        }
+        goi();
       };
     });
     return api;
@@ -109,9 +124,11 @@ var google = (function () {
 
 var KEY = (new URLSearchParams(location.search).get('key')||'').trim();
 var SCHEMA = {"sections":[{"id":"canhan","title":"Thông tin cá nhân","desc":"Khai đúng theo căn cước công dân.","fields":[{"k":"hoten","q":"Họ và tên","t":"text","req":1,"up":1,"hint":"Viết có dấu, ví dụ: Nguyễn Văn An"},{"k":"ngaysinh","q":"Ngày sinh","t":"date","req":1},{"k":"gioitinh","q":"Giới tính","t":"select","req":1,"opts":["Nam","Nữ"]},{"k":"chieucao","q":"Chiều cao (cm)","t":"num","req":1},{"k":"cannang","q":"Cân nặng (kg)","t":"num","req":1},{"k":"quequan","q":"Quê quán (tỉnh/thành phố)","t":"text","req":1},{"k":"nhommau","q":"Nhóm máu","t":"select","req":1,"opts":["A","B","O","AB","Không rõ"]},{"k":"canthi","q":"Cận thị","t":"select","req":1,"opts":["Có","Không"]},{"k":"mumau","q":"Mù màu","t":"select","req":1,"opts":["Có","Không"]},{"k":"taythuan","q":"Tay thuận","t":"select","req":1,"opts":["Phải","Trái","Cả hai"]},{"k":"sdt","q":"Số điện thoại (bản thân)","t":"tel","req":1},{"k":"sdtnt","q":"Số điện thoại (người thân)","t":"tel","req":1},{"k":"honnhan","q":"Tình trạng hôn nhân","t":"select","req":1,"opts":["Độc thân","Đã kết hôn","Ly hôn"]},{"k":"banglai","q":"Bằng lái xe","t":"select","opts":["Không có","Xe máy","Ô tô","Xe máy + Ô tô"]},{"k":"hutthuoc","q":"Hút thuốc","t":"select","req":1,"opts":["Có","Không"]},{"k":"ruoubia","q":"Rượu, bia","t":"select","req":1,"opts":["Có","Không"]},{"k":"hinhxam","q":"Hình xăm","t":"select","req":1,"opts":["Có","Không"]},{"k":"hokhau","q":"Địa chỉ hộ khẩu","t":"text","req":1},{"k":"mien","q":"Miền","t":"select","req":1,"opts":["Bắc","Trung","Nam"]},{"k":"monhoc","q":"Môn học yêu thích","t":"text"},{"k":"sogiay","q":"Số giày","t":"num"}]},{"id":"khac","title":"Nguyện vọng & thông tin khác","desc":"","fields":[{"k":"sothich","q":"Sở thích","t":"text","req":1},{"k":"tiengnhat","q":"Trình độ tiếng Nhật","t":"text","hint":"Ví dụ: Chưa học / N5 / N4"},{"k":"uudiem","q":"Ưu điểm","t":"text","req":1},{"k":"hanche","q":"Hạn chế","t":"text","req":1},{"k":"muctieu","q":"Mục tiêu đi Nhật","t":"text","req":1},{"k":"sotien","q":"Số tiền muốn tích luỹ sau 3 năm","t":"text","req":1,"hint":"Ví dụ: 700.000.000 đồng"},{"k":"dudinh","q":"Dự định sau khi về nước","t":"text","req":1},{"k":"nguoithannhat","q":"Có người thân sống ở Nhật không","t":"select","req":1,"opts":["Có","Không"]},{"k":"dinuocngoai","q":"Đã từng đi nước ngoài chưa","t":"select","req":1,"opts":["Rồi","Chưa"]},{"k":"ghichu","q":"Tâm tư, nguyện vọng muốn bổ sung","t":"area"}]}],"groups":[{"id":"hocvan","title":"Quá trình đi học","desc":"Khai từ cấp 1 đến cấp học cao nhất.","add_label":"Thêm trường học","item_label":"Trường","auto_nam":1,"defaults":[{"_ten":"Cấp 1 (Tiểu học)"},{"_ten":"Cấp 2 (THCS)"},{"_ten":"Cấp 3 (THPT)"}],"fields":[{"k":"tu","q":"Từ tháng/năm","t":"month","req":1},{"k":"den","q":"Đến tháng/năm","t":"month","req":1},{"k":"truong","q":"Tên trường","t":"text","req":1},{"k":"diachi","q":"Địa chỉ (tỉnh)","t":"text"},{"k":"bang","q":"Có bằng tốt nghiệp","t":"select","opts":["Có","Không"]},{"k":"loai","q":"Loại trường","t":"select","tu_muc":4,"opts":["Đại học","Cao đẳng","Trung cấp nghề","Khác"]}]},{"id":"lamviec","title":"Quá trình làm việc","desc":"Chưa đi làm thì bấm xoá hết các mục bên dưới.","add_label":"Thêm nơi làm việc","item_label":"Nơi làm việc","auto_nam":0,"defaults":[{}],"fields":[{"k":"tu","q":"Từ tháng/năm","t":"month"},{"k":"den","q":"Đến tháng/năm","t":"month"},{"k":"donvi","q":"Tên công ty / tỉnh","t":"text","req":1},{"k":"cviec","q":"Nội dung công việc","t":"text","req":1}]},{"id":"giadinh","title":"Thành phần gia đình","desc":"Khai bố, mẹ, anh chị em ruột, vợ/chồng, con (nếu có).","add_label":"Thêm người thân","item_label":"Người thân","auto_nam":0,"defaults":[{"quanhe":"Bố"},{"quanhe":"Mẹ"}],"fields":[{"k":"quanhe","q":"Mối quan hệ","t":"text","req":1,"hint":"Bố / Mẹ / Anh trai / Em gái…"},{"k":"hoten","q":"Họ tên","t":"text","req":1},{"k":"namsinh","q":"Năm sinh","t":"num"},{"k":"noio","q":"Nơi ở hiện nay","t":"text"},{"k":"songchung","q":"Em sống chung hay riêng","t":"select","opts":["Chung","Riêng"]},{"k":"nghe","q":"Nghề nghiệp","t":"text"}]}]};
-var rows = [], meta = {};
+var rows = [], meta = {}, KHO = {};   // KHO: nhớ chi tiết hồ sơ đã mở
 var dmy = v => { var m = String(v||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3]+'/'+m[2]+'/'+m[1] : String(v||''); };
 var esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function taiLai(){ KHO = {}; tai(); }
 
 function tai(){
   document.getElementById('ds').innerHTML = '<div class="empty">Đang tải…</div>';
@@ -155,13 +172,24 @@ function ve(){
 
 function xem(ma){
   document.getElementById('mask').classList.add('on');
+  if(KHO[ma]){ veChiTiet(KHO[ma]); return; }
   document.getElementById('modal').innerHTML = '<div class="empty">Đang tải…</div>';
   google.script.run.withSuccessHandler(r => {
     if(!r || !r.ok){ document.getElementById('modal').innerHTML='<div class="empty">Không tải được.</div>'; return; }
+    KHO[ma] = r; veChiTiet(r);
+  }).withFailureHandler(e => {
+    document.getElementById('modal').innerHTML =
+      '<button class="x" onclick="dong()">Đóng</button><div class="empty">Lỗi máy chủ: ' +
+      esc(e && e.message ? e.message : e) + '</div>';
+  }).chiTiet(KEY, ma);
+}
+
+function veChiTiet(r){
+  {
     var h = `<button class="x" onclick="dong()">Đóng</button>
       <h2>${esc(r.data.hoten)||'(chưa điền tên)'}</h2>
       <div style="color:#5d6b82;font-size:14px;margin-bottom:6px">Mã hồ sơ <b class="mono">${esc(r.ma)}</b> · ${esc(r.trangthai)}</div>`;
-    if(r.anh) h += `<img src="${r.anh.thumb}" style="width:120px;height:160px;object-fit:cover;border-radius:9px;border:1px solid #d3dced;margin:8px 0">`;
+    if(r.coanh) h += `<div id="oAnh" style="width:120px;height:160px;border-radius:9px;border:1px solid #d3dced;margin:8px 0;background:#f3f7fd;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:#5d6b82">${r.anh?'':'đang tải ảnh…'}</div>`;
 
     SCHEMA.sections.forEach(s => {
       h += `<h4>${esc(s.title)}</h4>`;
@@ -180,16 +208,25 @@ function xem(ma){
     h += `<div style="margin-top:20px;display:flex;gap:9px;flex-wrap:wrap">
         <button class="dl" id="bCV" onclick="taiCV('${r.ma}')">⬇ Tải CV Excel</button>
         <button class="dl" id="bCVA" onclick="taiCVPdf('${r.ma}')">⬇ Tải CV PDF</button>
-        <button class="dl2" id="bAnh" onclick="taiAnhVe('${r.ma}')"${r.anh?'':' disabled'}>⬇ Tải ảnh thẻ</button>
+        <button class="dl2" id="bAnh" onclick="taiAnhVe('${r.ma}')"${r.coanh?'':' disabled'}>⬇ Tải ảnh thẻ</button>
         <button class="dg" onclick="xoa('${r.ma}')">Xoá hồ sơ này</button>
         <a class="tools" style="text-decoration:none" href="${WEB_URL}?ma=${r.ma}" target="_blank"
            ><button>Mở bản khai của học sinh</button></a></div>`;
     document.getElementById('modal').innerHTML = h;
-  }).withFailureHandler(e => {
-    document.getElementById('modal').innerHTML =
-      '<button class="x" onclick="dong()">Đóng</button><div class="empty">Lỗi máy chủ: ' +
-      esc(e && e.message ? e.message : e) + '</div>';
-  }).chiTiet(KEY, ma);
+    if(r.coanh) hienAnh(r);
+  }
+}
+
+/** Ảnh thẻ tải sau, không bắt cửa sổ chi tiết phải chờ. */
+function hienAnh(r){
+  var o = document.getElementById('oAnh'); if(!o) return;
+  if(r.anh && r.anh.thumb){ o.innerHTML = `<img src="${r.anh.thumb}" style="width:100%;height:100%;object-fit:cover">`; return; }
+  google.script.run.withSuccessHandler(function(a){
+    if(!a || !a.ok) { o.textContent = 'Không tải được ảnh'; return; }
+    r.anh = { thumb: 'data:' + a.mime + ';base64,' + a.b64 };
+    var o2 = document.getElementById('oAnh');
+    if(o2) o2.innerHTML = `<img src="${r.anh.thumb}" style="width:100%;height:100%;object-fit:cover">`;
+  }).withFailureHandler(function(){ o.textContent = 'Không tải được ảnh'; }).taiAnh(KEY, r.ma);
 }
 
 function dong(){ document.getElementById('mask').classList.remove('on'); }
@@ -244,6 +281,7 @@ function taiAnhVe(ma){
 
 function xoa(ma){
   if(!confirm('Xoá vĩnh viễn hồ sơ '+ma+'? Không khôi phục được.')) return;
+  delete KHO[ma];
   google.script.run.withSuccessHandler(()=>{ dong(); tai(); }).xoaHoSo(KEY, ma);
 }
 
