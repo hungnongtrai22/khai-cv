@@ -51,6 +51,27 @@ function _bmi(cao, nang) {
   return (h > 0 && w > 0) ? Math.round(w / (h * h) * 10) / 10 : '';
 }
 
+/* --------------------------------------------------- kho file đã tạo sẵn */
+/**
+ * File CV mất khoảng 10 giây để dựng. Sau khi dựng xong ta cất vào một thư mục
+ * riêng, đặt tên theo mã hồ sơ + thời điểm cập nhật. Lần tải sau, nếu hồ sơ chưa
+ * sửa gì thì lấy luôn file cũ ra (khoảng 1–2 giây).
+ */
+function khoCV_() {
+  var id = P.getProperty('KHO_ID'), tm = null;
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  tm = DriveApp.createFolder('FILE CV ĐÃ TẠO – SƠ YẾU LÝ LỊCH');
+  P.setProperty('KHO_ID', tm.getId());
+  return tm;
+}
+
+function _traFile(f, ma, hoten, duoi) {
+  return { ok: true, dang: duoi,
+           ten: ma + ' - ' + String(hoten || 'ho-so').replace(/[\\/:*?"<>|]/g, ' ').trim() +
+                '.' + duoi,
+           b64: Utilities.base64Encode(f.getBlob().getBytes()) };
+}
+
 /* ------------------------------------------------------------------ xuất CV */
 function xuatCV(key, ma, dang) {
   ktKey_(key);
@@ -60,6 +81,13 @@ function xuatCV(key, ma, dang) {
   var shD = sheet_(), r = timDong_(shD, ma);
   if (r < 0) throw new Error('Không tìm thấy hồ sơ ' + ma);
   var o = docDong_(shD, r);
+
+  var duoi = (dang === 'pdf') ? 'pdf' : 'xlsx';
+  var kho = khoCV_();
+  var dau = ma + '_' + String(o.capnhat_luc || '').replace(/\D/g, '');
+  var khoa = dau + '.' + duoi;
+  var co = kho.getFilesByName(khoa);
+  if (co.hasNext()) return _traFile(co.next(), ma, o.hoten, duoi);
 
   var nhom = {};
   NHOM_EX.forEach(function (g) {
@@ -195,9 +223,20 @@ function xuatCV(key, ma, dang) {
         '&r1=0&c1=0&r2=' + het + '&c2=12'
       : goc2 + 'format=xlsx';
     var res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } });
+
+    // cất vào kho để lần sau lấy ngay, đồng thời dọn các bản cũ của hồ sơ này
+    try {
+      var cu = kho.getFiles();
+      while (cu.hasNext()) {
+        var fc = cu.next();
+        if (fc.getName().indexOf(ma + '_') === 0 && fc.getName().indexOf(dau) !== 0) fc.setTrashed(true);
+      }
+      kho.createFile(res.getBlob().setName(khoa));
+    } catch (e) {}
+
     var ten = String(o.hoten || 'ho-so').replace(/[\\/:*?"<>|]/g, ' ').trim();
-    return { ok: true, dang: (dang === 'pdf' ? 'pdf' : 'xlsx'),
-             ten: ma + ' - ' + ten + (dang === 'pdf' ? '.pdf' : '.xlsx'),
+    return { ok: true, dang: duoi,
+             ten: ma + ' - ' + ten + '.' + duoi,
              b64: Utilities.base64Encode(res.getBlob().getBytes()) };
   } finally {
     try { ban.setTrashed(true); } catch (e) {}
