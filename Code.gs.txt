@@ -188,6 +188,7 @@ function ghi_(payload, nop) {
     });
 
     sh.getRange(r, 1, 1, COLS.length).setValues([out]);
+    xoaDem_();
     return { ok: true, ma: ma, anh: anhTra };
   } finally {
     lock.releaseLock();
@@ -256,8 +257,13 @@ function lienKet_() {
   return { sheetUrl: a, folderUrl: b };
 }
 
+function xoaDem_() { try { CacheService.getScriptCache().remove('DS'); } catch (e) {} }
+
 function dsHoSo(key) {
   ktKey_(key);
+  var dem = CacheService.getScriptCache();
+  var sanCo = dem.get('DS');
+  if (sanCo) { try { return JSON.parse(sanCo); } catch (e) {} }
   var lk = lienKet_();
   var sh = sheet_();
   var n = sh.getLastRow() - 1;
@@ -278,9 +284,12 @@ function dsHoSo(key) {
       coanh: !!v[idx.anh_id]
     };
   }).reverse();
-  return { ok: true, rows: rows,
-           sheetUrl: lk.sheetUrl, folderUrl: lk.folderUrl,
-           formUrl: ScriptApp.getService().getUrl() };
+  var kq = { ok: true, rows: rows,
+             sheetUrl: lk.sheetUrl, folderUrl: lk.folderUrl,
+             formUrl: ScriptApp.getService().getUrl() };
+  var chuoi = JSON.stringify(kq);
+  if (chuoi.length < 90000) { try { dem.put('DS', chuoi, 90); } catch (e) {} }
+  return kq;
 }
 
 function chiTiet(key, ma) { ktKey_(key); return taiNhap(ma, true); }
@@ -292,6 +301,7 @@ function xoaHoSo(key, ma) {
   var o = docDong_(sh, r);
   if (o.anh_id) { try { DriveApp.getFileById(o.anh_id).setTrashed(true); } catch (e) {} }
   sh.deleteRow(r);
+  xoaDem_();
   return { ok: true };
 }
 

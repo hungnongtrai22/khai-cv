@@ -128,13 +128,17 @@ var rows = [], meta = {}, KHO = {};   // KHO: nhớ chi tiết hồ sơ đã m�
 var dmy = v => { var m = String(v||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3]+'/'+m[2]+'/'+m[1] : String(v||''); };
 var esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-function taiLai(){ KHO = {}; tai(); }
+function taiLai(){ KHO = {}; try{ localStorage.removeItem('ntm_ds'); }catch(e){} tai(); }
 
 function tai(){
-  document.getElementById('ds').innerHTML = '<div class="empty">Đang tải…</div>';
+  var cu = null;
+  try { cu = JSON.parse(localStorage.getItem('ntm_ds')||'null'); } catch(e){}
+  if(cu && cu.rows){ rows = cu.rows; meta = cu; ve(); }
+  else document.getElementById('ds').innerHTML = '<div class="empty">Đang tải…</div>';
   google.script.run.withSuccessHandler(r => {
     if(!r || !r.ok){ document.getElementById('ds').innerHTML='<div class="empty">Không tải được.</div>'; return; }
     rows = r.rows; meta = r;
+    try { localStorage.setItem('ntm_ds', JSON.stringify(r)); } catch(e){}
     document.getElementById('lSheet').href = r.sheetUrl;
     document.getElementById('lFolder').href = r.folderUrl;
     ve();
@@ -226,7 +230,7 @@ function hienAnh(r){
     r.anh = { thumb: 'data:' + a.mime + ';base64,' + a.b64 };
     var o2 = document.getElementById('oAnh');
     if(o2) o2.innerHTML = `<img src="${r.anh.thumb}" style="width:100%;height:100%;object-fit:cover">`;
-  }).withFailureHandler(function(){ o.textContent = 'Không tải được ảnh'; }).taiAnh(KEY, r.ma);
+  }).withFailureHandler(function(){ o.textContent = 'Không tải được ảnh'; }).taiAnh(KEY, r.ma, true);
 }
 
 function dong(){ document.getElementById('mask').classList.remove('on'); }
