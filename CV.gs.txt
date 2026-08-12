@@ -205,13 +205,16 @@ function xuatCV(key, ma, dang) {
 }
 
 /* ------------------------------------------------------------------ tải ảnh */
-function taiAnh(key, ma) {
+/** nho = true: chỉ lấy ảnh thu nhỏ của Drive (nhẹ, dùng để xem trên trang quản trị). */
+function taiAnh(key, ma, nho) {
   ktKey_(key);
   var sh = sheet_(), r = timDong_(sh, ma);
   if (r < 0) return { ok: false };
   var o = docDong_(sh, r);
   if (!o.anh_id) return { ok: false, loi: 'Hồ sơ này chưa có ảnh thẻ.' };
-  var f = DriveApp.getFileById(o.anh_id), b = f.getBlob();
+  var f = DriveApp.getFileById(o.anh_id), b = null;
+  if (nho) { try { b = f.getThumbnail(); } catch (e) { b = null; } }
+  if (!b) b = f.getBlob();
   var duoi = b.getContentType().indexOf('png') >= 0 ? 'png' : 'jpg';
   var ten = String(o.hoten || 'anh').replace(/[\\/:*?"<>|]/g, ' ').trim();
   return { ok: true, ten: ma + ' - ' + ten + '.' + duoi,
